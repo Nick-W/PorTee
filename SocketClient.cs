@@ -13,37 +13,35 @@ using System.IO;
 
 namespace Portee
 {
-    public class SocketClient
+    internal sealed class SocketClient : SocketBase
     {
-        public delegate void ReceivedServerDataHandlerDel(byte[] Data, TcpClient Client);
-        public List<TcpClient> ActiveClients = new List<TcpClient>();
-        private TcpClient tcpClient;
-        private Thread connectThread;
-        private bool Active = true;
-        private int Port;
-        private string Server;
-        public ReceivedServerDataHandlerDel ReceivedDataHandler = null;
+        public delegate void ReceivedServerDataHandlerDel(byte[] data, TcpClient client);
+        private TcpClient _tcpClient;
+        private Thread _connectThread;
+        private bool _active = true;
+        private readonly int _port;
+        private readonly string _server;
 
-        public SocketClient(string Server, int Port)
+        public SocketClient(string server, int port)
         {
-            this.Server = Server;
-            this.Port = Port;
+            this._server = server;
+            this._port = port;
             Start();
         }
 
-        public void Start()
+        public override void Start()
         {
-            this.connectThread = new Thread(new ThreadStart(ConnectToServer));
-            this.connectThread.Start();
+            this._connectThread = new Thread(new ThreadStart(ConnectToServer));
+            this._connectThread.Start();
         }
 
-        public void Shutdown()
+        public override void Shutdown()
         {
-            this.Active = false;
+            this._active = false;
             Console.WriteLine("Disconnecting active clients");
-            this.connectThread.Abort();
+            this._connectThread.Abort();
             Console.WriteLine("Stopping socket client service");
-            this.tcpClient.Close();
+            this._tcpClient.Close();
         }
 
         private void ConnectToServer()
@@ -51,13 +49,13 @@ namespace Portee
             while (true)
             try
             {
-                this.tcpClient = new TcpClient();
-                Console.WriteLine("Attempting to connect to: {0}:{1}", Server, Port);
-                this.tcpClient.Connect(Server, Port);
-                Console.WriteLine("Connected to: {0}", this.tcpClient.Client.RemoteEndPoint);
+                this._tcpClient = new TcpClient();
+                Console.WriteLine("Attempting to connect to: {0}:{1}", _server, _port);
+                this._tcpClient.Connect(_server, _port);
+                Console.WriteLine("Connected to: {0}", this._tcpClient.Client.RemoteEndPoint);
                 //Create a thread to handle the client
                 Thread clientThread = new Thread(ClientHandler);
-                clientThread.Start(this.tcpClient);
+                clientThread.Start(this._tcpClient);
                 break;
             }
             catch
@@ -73,7 +71,7 @@ namespace Portee
             ActiveClients.Add(User);
 
             //Main Receiver
-            while (Active)
+            while (_active)
             {
                 byte[] dataSegment = new byte[1048576];
                 int bytesRead = 0;
@@ -91,7 +89,7 @@ namespace Portee
                     Console.WriteLine("Client Disconnected (Socket Read Error): {0}", User.Client.RemoteEndPoint);
                     break;
                 }
-                if (!Active)
+                if (!_active)
                     break;
 
                 if (bytesRead == 0) //Disconnect
@@ -109,24 +107,6 @@ namespace Portee
             ActiveClients.Remove(User);
             User.Close();
             ConnectToServer();
-        }
-
-        //Send a message to all active NetworkStreams
-        public void Broadcast(byte[] data)
-        {
-            Parallel.ForEach(ActiveClients, User =>
-                                                {
-                                                    try
-                                                    {
-                                                        User.GetStream().Write(data, 0, data.Length);
-                                                    }
-                                                    catch { }
-                                                });
-        }
-
-        private void Disconnect(NetworkStream clientStream)
-        {
-            clientStream.Close();
         }
 
         ~SocketClient()

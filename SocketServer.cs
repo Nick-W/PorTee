@@ -14,145 +14,105 @@ using System.IO;
 
 namespace Portee
 {
-    internal class SocketServer
+    internal sealed class SocketServer : SocketBase
     {
-        public delegate void ReceivedServerDataHandlerDel(byte[] Data, TcpClient Client);
-        public List<TcpClient> ActiveClients = new List<TcpClient>();
-        public ASCIIEncoding encoder = new ASCIIEncoding();
-        private TcpListener tcpListener;
-        private Thread listenThread;
-        private bool Active = true;
-        public IPAddress Host;
-        public int Port;
-        public ReceivedServerDataHandlerDel ReceivedDataHandler = null;
+        public delegate void ReceivedServerDataHandlerDel(byte[] data, TcpClient client);
+        private TcpListener _tcpListener;
+        private Thread _listenThread;
+        private bool _active = true;
+        private readonly IPAddress _host;
+        private readonly int _port;
 
-        public SocketServer(IPAddress Host, int Port)
+        public SocketServer(IPAddress host, int port)
         {
-            this.Host = Host;
-            this.Port = Port;
+            this._host = host;
+            this._port = port;
             Start();
         }
 
-        public void Start()
+        public override void Start()
         {
-            this.tcpListener = new TcpListener(Host,Port);
-            this.listenThread = new Thread(new ThreadStart(ListenForClients));
-            this.listenThread.Start();
+            this._tcpListener = new TcpListener(_host,_port);
+            this._listenThread = new Thread(new ThreadStart(ListenForClients));
+            this._listenThread.Start();
         }
 
-        public void Shutdown()
+        public override void Shutdown()
         {
-            this.Active = false;
+            this._active = false;
             Console.WriteLine("Disconnecting active clients");
-            this.listenThread.Abort();
+            this._listenThread.Abort();
             Console.WriteLine("Shutting down server");
-            this.tcpListener.Stop();
+            this._tcpListener.Stop();
         }
 
         private void ListenForClients()
         {
-            while (true)
+            while (_active)
                 try
                 {
-                    this.tcpListener.Start();
+                    this._tcpListener.Start();
                     break;
                 }
                 catch
                 {
-                    Console.WriteLine("Failed to bind local socket on {0}:{1}, retrying...", Host, Port);
+                    Console.WriteLine("Failed to bind local socket on {0}:{1}, retrying...", _host, _port);
                     Thread.Sleep(1000);
                     continue;
                 }
 
-            Console.WriteLine("Listening for connections on {0}:{1}",Host,Port);
+            Console.WriteLine("Listening for connections on {0}:{1}",_host,_port);
 
-            while (true)
+            while (_active)
             {
                 //Blocks until a client connects
-                TcpClient client = tcpListener.AcceptTcpClient();
+                var client = _tcpListener.AcceptTcpClient();
                 Console.WriteLine("Client Connected: {0}",client.Client.RemoteEndPoint);
                 //Create a thread to handle the client
-                Thread clientThread = new Thread(ClientHandler);
+                var clientThread = new Thread(ClientHandler);
                 clientThread.Start(client);
             }
         }
 
         private void ClientHandler(Object client)
         {
-            TcpClient User = (TcpClient)client;
-            ActiveClients.Add(User);
+            var user = (TcpClient)client;
+            ActiveClients.Add(user);
 
             //Main Receiver
-            while (Active)
+            while (_active)
             {
-                byte[] dataSegment = new byte[1048576];
-                int bytesRead = 0;
+                var dataSegment = new byte[1048576];
 
                 try
                 {
                     //Blocks until data is received
-                    bytesRead = User.GetStream().Read(dataSegment, 0, 1048576);
+                    var bytesRead = user.GetStream().Read(dataSegment, 0, 1048576);
                     if (bytesRead == 0) //Disconnected
                     {
-                        Console.WriteLine("Client Disconnected: {0}", User.Client.RemoteEndPoint);
+                        Console.WriteLine("Client Disconnected: {0}", user.Client.RemoteEndPoint);
                         break;
                     }
                     //Resize the dataSegment to the actual packet length
                     Array.Resize(ref dataSegment, bytesRead);
                     //Dispatch the incoming packet
                     if (ReceivedDataHandler != null)
-                        ReceivedDataHandler(dataSegment, User);
+                        ReceivedDataHandler(dataSegment, user);
                     else
                         Console.WriteLine("Data received, but no method has registered to handle it");
                 }
                 //Socket Error
                 catch
                 {
-                    Console.WriteLine("Client Disconnected (Socket Read Error): {0}", User.Client.RemoteEndPoint);
+                    Console.WriteLine("Client Disconnected (Socket Read Error): {0}", user.Client.RemoteEndPoint);
                     break;
                 }
-                if (!Active)
+                if (!_active)
                     break;
             }
             //Close client TCP stream
-            ActiveClients.Remove(User);
-            User.Close();
-        }
-
-        //Send a message to a client
-        private static void Send(TcpClient User, string message)
-        {
-            throw new NotImplementedException();
-        }
-
-        //Send a message to all active NetworkStreams
-        public void Broadcast(string message)
-        {
-            throw new NotImplementedException();
-        }
-
-        //Send a message to all active NetworkStreams
-        public void Broadcast(byte[] data)
-        {
-            Parallel.ForEach(ActiveClients, User =>
-            {
-                try
-                {
-                    User.GetStream().Write(data, 0, data.Length);
-                }
-                catch { }
-            });
-        }
-
-        //Send a message to multiple clients
-        private void Multicast(ArrayList TargetClients, byte[] data)
-        {
-            throw new NotImplementedException();
-        }
-
-        private void Disconnect(NetworkStream clientStream)
-        {
-            clientStream.Close();
+            ActiveClients.Remove(user);
+            user.Close();
         }
 
         ~SocketServer()
