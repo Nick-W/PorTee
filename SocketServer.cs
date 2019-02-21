@@ -56,18 +56,19 @@ namespace Portee
                 }
                 catch
                 {
-                    Console.WriteLine("Failed to bind local socket on {0}:{1}, retrying...", _host, _port);
+                    Console.WriteLine($"Failed to bind local socket on {_host}:{_port}, retrying...");
                     Thread.Sleep(1000);
                     continue;
                 }
 
-            Console.WriteLine("Listening for connections on {0}:{1}",_host,_port);
+            Console.WriteLine($"Listening for connections on {_host}:{_port}");
 
             while (_active)
             {
                 //Blocks until a client connects
                 var client = _tcpListener.AcceptTcpClient();
-                Console.WriteLine("Client Connected: {0}",client.Client.RemoteEndPoint);
+                Console.WriteLine($"Client Connected: {client.Client.RemoteEndPoint}");
+                client.NoDelay = true;
                 //Create a thread to handle the client
                 var clientThread = new Thread(ClientHandler);
                 clientThread.Start(client);
@@ -82,15 +83,15 @@ namespace Portee
             //Main Receiver
             while (_active)
             {
-                var dataSegment = new byte[1048576];
+                var dataSegment = new byte[Program.BufferSize];
 
                 try
                 {
                     //Blocks until data is received
-                    var bytesRead = user.GetStream().Read(dataSegment, 0, 1048576);
+                    var bytesRead = user.GetStream().Read(dataSegment, 0, Program.BufferSize);
                     if (bytesRead == 0) //Disconnected
                     {
-                        Console.WriteLine("Client Disconnected: {0}", user.Client.RemoteEndPoint);
+                        Console.WriteLine($"Client Disconnected: {user.Client.RemoteEndPoint}");
                         break;
                     }
                     //Resize the dataSegment to the actual packet length
@@ -99,12 +100,12 @@ namespace Portee
                     if (ReceivedDataHandler != null)
                         ReceivedDataHandler(dataSegment, user);
                     else
-                        Console.WriteLine("Data received, but no method has registered to handle it");
+                        Console.WriteLine($"Data received, but no method has registered to handle it");
                 }
                 //Socket Error
                 catch
                 {
-                    Console.WriteLine("Client Disconnected (Socket Read Error): {0}", user.Client.RemoteEndPoint);
+                    Console.WriteLine($"Client Disconnected (Socket Read Error): {user.Client.RemoteEndPoint}");
                     break;
                 }
                 if (!_active)

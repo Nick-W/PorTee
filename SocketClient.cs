@@ -47,22 +47,23 @@ namespace Portee
         private void ConnectToServer()
         {
             while (true)
-            try
-            {
-                this._tcpClient = new TcpClient();
-                Console.WriteLine("Attempting to connect to: {0}:{1}", _server, _port);
-                this._tcpClient.Connect(_server, _port);
-                Console.WriteLine("Connected to: {0}", this._tcpClient.Client.RemoteEndPoint);
-                //Create a thread to handle the client
-                Thread clientThread = new Thread(ClientHandler);
-                clientThread.Start(this._tcpClient);
-                break;
-            }
-            catch
-            {
-                Console.WriteLine("Connection failed, retrying...");
-                Thread.Sleep(1000);
-            }
+                try
+                {
+                    this._tcpClient = new TcpClient();
+                    _tcpClient.NoDelay = true;
+                    Console.WriteLine($"Attempting to connect to: {_server}:{_port}");
+                    this._tcpClient.Connect(_server, _port);
+                    Console.WriteLine($"Connected to: {this._tcpClient.Client.RemoteEndPoint}");
+                    //Create a thread to handle the client
+                    Thread clientThread = new Thread(ClientHandler);
+                    clientThread.Start(this._tcpClient);
+                    break;
+                }
+                catch
+                {
+                    Console.WriteLine("Connection failed, retrying...");
+                    Thread.Sleep(1000);
+                }
         }
 
         private void ClientHandler(Object client)
@@ -73,20 +74,20 @@ namespace Portee
             //Main Receiver
             while (_active)
             {
-                byte[] dataSegment = new byte[1048576];
+                byte[] dataSegment = new byte[Program.BufferSize];
                 int bytesRead = 0;
                 byte[] ReceivedData;
                 try
                 {
                     //Blocks until data is received
-                    bytesRead = User.GetStream().Read(dataSegment, 0, 1048576);
+                    bytesRead = User.GetStream().Read(dataSegment, 0, Program.BufferSize);
                     ReceivedData = new byte[bytesRead];
                     Buffer.BlockCopy(dataSegment, 0, ReceivedData, 0, bytesRead);
                 }
 
                 catch //Socket Error
                 {
-                    Console.WriteLine("Client Disconnected (Socket Read Error): {0}", User.Client.RemoteEndPoint);
+                    Console.WriteLine($"Client Disconnected (Socket Read Error): {User.Client.RemoteEndPoint}");
                     break;
                 }
                 if (!_active)
@@ -94,7 +95,7 @@ namespace Portee
 
                 if (bytesRead == 0) //Disconnect
                 {
-                    Console.WriteLine("Client Disconnected: {0}", User.Client.RemoteEndPoint);
+                    Console.WriteLine($"Client Disconnected: {User.Client.RemoteEndPoint}");
                     break;
                 }
 

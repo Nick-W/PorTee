@@ -23,29 +23,29 @@ namespace Portee
         public static int Remoteport;
         public static IPAddress Localhost = new IPAddress(0);
         public static int Localport;
+        public static int BufferSize = 1024;
         public static optionflags Options;
         public static SocketServer Server;
         public static SocketClient Client;
 
         static void Main(string[] args)
         {
-            Console.WriteLine("Portee v.{0} by Nick Wilson",
-                  Assembly.GetExecutingAssembly().GetName().Version);
+            Console.WriteLine($"Portee v.{Assembly.GetExecutingAssembly().GetName().Version} by Nick Wilson <nick@oyo.co>");
             try
             {
                 var unknownArgs = p.Parse(args);
                 if (unknownArgs.Count > 0 || (Options & optionflags.SHOWHELP) == optionflags.SHOWHELP)
                 {
                     var err = new StringBuilder();
-                    foreach (var a in unknownArgs)
-                        err.AppendLine(String.Format("Invalid argument: {0}", a));
+                    foreach (var arg in unknownArgs)
+                        _ = err.AppendLine($"Invalid argument: {arg}");
                     ShowHelp(err.ToString().Trim());
                     Environment.Exit(1);
                 }
             }
             catch (OptionException e)
             {
-                ShowHelp("Error: " + e.Message);
+                ShowHelp($"Error: {e.Message}");
                 Environment.Exit(1);
             }
 
@@ -54,17 +54,18 @@ namespace Portee
                 Console.Write("Remote Host: ");
                 Remotehost = Console.ReadLine();
                 Console.Write("Remote Port: ");
-                Remoteport = Localport = int.Parse(Console.ReadLine());
+                while (!int.TryParse(Console.ReadLine(), out Localport) || Localport < 1 || Localport > 65535)
+                    Console.WriteLine("Invalid Port");
             }
 
             //Sanity check options
             if (Options.HasFlag(optionflags.READONLY) && Options.HasFlag(optionflags.WRITEONLY))
             {
-                ShowHelp("Error: dividing by 0 are we?");
+                ShowHelp("Error: dividing by 0 are we? ReadOnly and WriteOnly options are mutually exclusive");
             }
             if (String.IsNullOrEmpty(Remotehost) && (Remoteport < 1 || Remoteport > 65535))
             {
-                ShowHelp("Error: Remote host/port are missing or invalid");
+                ShowHelp("Error: Remote host/port missing or invalid");
                 Environment.Exit(1);
             }
             if (Localport < 1 || Localport > 65535)
@@ -72,10 +73,15 @@ namespace Portee
                 ShowHelp("Error: Localport is invalid");
                 Environment.Exit(1);
             }
+            if (BufferSize < 1 || BufferSize > 1048576)
+            {
+                ShowHelp("Error: BufferSize is out of range (1-1048576 bytes)");
+                Environment.Exit(1);
+            }
 
             //Launch the server
-            Server = new SocketServer(Localhost,Localport);
-            Client = new SocketClient(Remotehost,Remoteport);
+            Server = new SocketServer(Localhost, Localport);
+            Client = new SocketClient(Remotehost, Remoteport);
             Server.ReceivedDataHandler += ServerReceivedDataHandler;
             Client.ReceivedDataHandler += ClientReceivedDataHandler;
         }
@@ -120,8 +126,9 @@ namespace Portee
                                          {
                                              {"h|host=", "Remote Host", v => Remotehost = v},
                                              {"p|port=", "Remote host port", v => Remoteport = Localport = int.Parse(v)},
-                                             {"a|localhost=", "Local IP Address to listen on (0.0.0.0)", v => Localhost = IPAddress.Parse(v)},
+                                             {"a|localhost=", "Local IP Address to listen on (default: 0.0.0.0)", v => Localhost = IPAddress.Parse(v)},
                                              {"l|localport=", "Local port to use (defaults to remote port)", v => Localport = int.Parse(v)},
+                                             {"s|size=", "Sets the buffer size for latency-sensitive applications (default: 1024)", v => BufferSize = int.Parse(v)},
                                              {"v|verbose", "Show traffic in hex/ascii", v => Options |= optionflags.VERBOSE},
                                              {"read-only", "Only allow clients to consume traffic", v => Options |= optionflags.READONLY},
                                              {"write-only", "Only allow clients to send traffic", v => Options |= optionflags.WRITEONLY},
@@ -131,10 +138,9 @@ namespace Portee
 
         private static void ShowHelp(string err = null)
         {
-            Console.WriteLine("  Usage: {0} -h (host) -p (port) [options]",
-                              Path.GetFileName(Environment.GetCommandLineArgs().First()));
+            Console.WriteLine($"  Usage: {Path.GetFileName(Environment.GetCommandLineArgs().First())} -h (host) -p (port) [options]");
             if (!String.IsNullOrEmpty(err))
-                Console.WriteLine("    {0}", err);
+                Console.WriteLine($"    {err}");
             Console.WriteLine();
             Console.WriteLine("Options:");
             p.WriteOptionDescriptions(Console.Out);
