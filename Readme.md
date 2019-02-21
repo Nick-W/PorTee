@@ -27,6 +27,6 @@ Optional:
   -?|--help         Show usage
 
 Example:
-portee.exe -h towel.blinkenlights.nl -p 23 &
-nc localhost 23
+  portee.exe -h towel.blinkenlights.nl -p 23 &
+  nc localhost 23
 </pre>
